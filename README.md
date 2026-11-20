@@ -17,6 +17,29 @@ FLUXSHOT_TRACE=1 ./target/release/fluxshot   # print latency timings
 macOS: grant **Screen Recording** to your terminal (System Settings → Privacy & Security),
 otherwise captures come back as just the wallpaper.
 
+### Linux
+
+Works on X11 and Wayland (GNOME, KDE, wlroots compositors like sway/Hyprland).
+Build dependencies:
+
+```sh
+# Debian/Ubuntu
+sudo apt install pkg-config clang libclang-dev libpipewire-0.3-dev libxcb1-dev \
+  libxcb-randr0-dev libxkbcommon-dev libwayland-dev libdbus-1-dev libegl-dev libgbm-dev
+# Fedora
+sudo dnf install pkgconf clang clang-devel pipewire-devel libxcb-devel \
+  libxkbcommon-devel wayland-devel dbus-devel mesa-libEGL-devel mesa-libgbm-devel
+```
+
+- There is no built-in global hotkey: bind `fluxshot` to a key (e.g. `Print`)
+  in your desktop's keyboard settings, or in sway/Hyprland config.
+- Wayland: monitors are discovered through XWayland, so it must be enabled
+  (it is by default on GNOME, KDE and sway). GNOME/KDE capture through the
+  desktop portal and may ask for screenshot permission the first time.
+- Copying leaves a small background `fluxshot __serve-clipboard` process
+  that serves the image (X11/Wayland clipboards are owned by a live process,
+  same as `xclip`/`wl-copy`). It exits as soon as something else is copied.
+
 | Key | Action |
 |---|---|
 | drag | select region (Select tool: move/resize with handles) |

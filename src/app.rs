@@ -2,7 +2,6 @@
 //! frozen capture. Rendering is CPU (tiny-skia) → softbuffer.
 
 use std::num::NonZeroU32;
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -13,12 +12,12 @@ use winit::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
-use winit::window::{CursorIcon, Window, WindowId, WindowLevel};
+use winit::monitor::MonitorHandle;
+use winit::window::{CursorIcon, Fullscreen, Window, WindowId, WindowLevel};
 
 use crate::annotation::Tool;
 use crate::capture::MonitorShot;
 use crate::geom::{Pt, Rect};
-use crate::output;
 use crate::render::{self, blit_scaled, render_export};
 use crate::state::{Handle, Hover, PALETTE, State};
 use crate::toolbar::{self, Button};
@@ -28,7 +27,6 @@ const HANDLE_GRAB: f32 = 10.0; // logical
 const ACCENT: [u8; 4] = [0, 122, 255, 255];
 
 pub struct Options {
-    pub save_dir: PathBuf,
     pub t0: Instant,
     pub trace: bool,
 }
@@ -54,6 +52,12 @@ enum Finish {
     Save,
 }
 
+/// What the user asked for; the caller performs the actual output.
+pub enum Outcome {
+    Copy(Pixmap),
+    Save(Pixmap),
+}
+
 struct App {
     shots: Vec<MonitorShot>,
     views: Vec<View>,
@@ -62,12 +66,12 @@ struct App {
     opts: Options,
     /// Last view the pointer was over (target for "no selection" export).
     last_view: usize,
-    outcome: Option<Result<String>>,
+    outcome: Option<Result<Outcome>>,
 }
 
 /// Show the overlay and block until the user copies, saves or cancels.
-/// Returns a human-readable message describing what happened, or `None` on cancel.
-pub fn run(shots: Vec<MonitorShot>, opts: Options) -> Result<Option<String>> {
+/// Returns the exported image and what to do with it, or `None` on cancel.
+pub fn run(shots: Vec<MonitorShot>, opts: Options) -> Result<Option<Outcome>> {
     #[allow(unused_mut)]
     let mut builder = EventLoop::builder();
     #[cfg(target_os = "macos")]
@@ -94,18 +98,47 @@ pub fn run(shots: Vec<MonitorShot>, opts: Options) -> Result<Option<String>> {
 
 impl App {
     fn create_views(&mut self, el: &ActiveEventLoop) -> Result<()> {
-        for shot in &self.shots {
+        let linux_monitors: Vec<Option<MonitorHandle>> = if cfg!(target_os = "linux") {
+            let handles: Vec<MonitorHandle> = el.available_monitors().collect();
+            let infos: Vec<MonitorInfo> = handles
+                .iter()
+                .map(|m| MonitorInfo {
+                    name: m.name().unwrap_or_default(),
+                    x: m.position().x,
+                    y: m.position().y,
+                    width: m.size().width,
+                    height: m.size().height,
+                })
+                .collect();
+            match_monitors(&self.shots, &infos)
+                .into_iter()
+                .map(|j| j.map(|j| handles[j].clone()))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        for (i, shot) in self.shots.iter().enumerate() {
             let attrs = Window::default_attributes()
                 .with_title("FluxShot")
                 .with_decorations(false)
                 .with_resizable(false)
                 .with_window_level(WindowLevel::AlwaysOnTop)
                 .with_visible(false);
-            // xcap reports logical points on macOS and physical pixels elsewhere.
+            // xcap reports logical points on macOS and physical pixels on Windows.
+            // On Linux its coordinates are divided by a global scale factor and
+            // Wayland can't position windows at all, so instead go borderless
+            // fullscreen on the matching output (also covers panels/docks).
             let attrs = if cfg!(target_os = "macos") {
                 attrs
                     .with_position(LogicalPosition::new(shot.x, shot.y))
                     .with_inner_size(LogicalSize::new(shot.width, shot.height))
+            } else if let Some(Some(m)) = linux_monitors.get(i) {
+                // Also start at the monitor's geometry: X11 only applies
+                // fullscreen once the window is mapped.
+                attrs
+                    .with_position(m.position())
+                    .with_inner_size(m.size())
+                    .with_fullscreen(Some(Fullscreen::Borderless(Some(m.clone()))))
             } else {
                 attrs
                     .with_position(PhysicalPosition::new(shot.x, shot.y))
@@ -117,16 +150,7 @@ impl App {
             window.set_cursor(CursorIcon::Crosshair);
 
             let size = window.inner_size();
-            let (w, h) = (size.width.max(1), size.height.max(1));
-            let scale = w as f32 / shot.image.width() as f32;
-            let dimmed_img = render::dimmed(&shot.image, 0.45);
-            let dimmed = if (scale - 1.0).abs() < f32::EPSILON && h == shot.image.height() {
-                dimmed_img
-            } else {
-                let mut d = Pixmap::new(w, h).expect("window size");
-                blit_scaled(&mut d, &dimmed_img, 0.0, 0.0, scale);
-                d
-            };
+            let (frame, dimmed, scale) = fit_to_window(&shot.image, size.width, size.height);
             let context =
                 softbuffer::Context::new(window.clone()).map_err(|e| anyhow::anyhow!("{e}"))?;
             let surface = softbuffer::Surface::new(&context, window.clone())
@@ -135,7 +159,7 @@ impl App {
                 ui: window.scale_factor() as f32,
                 window,
                 surface,
-                frame: Pixmap::new(w, h).expect("window size"),
+                frame,
                 dimmed,
                 scale,
                 cursor: Pt::default(),
@@ -154,6 +178,17 @@ impl App {
             eprintln!("[trace] overlay visible after {:?}", self.opts.t0.elapsed());
         }
         Ok(())
+    }
+
+    /// The compositor/WM may size the window after creation (X11 applies
+    /// fullscreen on map, Wayland configures asynchronously): re-fit buffers.
+    fn resized(&mut self, vi: usize, w: u32, h: u32) {
+        let v = &mut self.views[vi];
+        if (w.max(1), h.max(1)) == (v.frame.width(), v.frame.height()) {
+            return;
+        }
+        (v.frame, v.dimmed, v.scale) = fit_to_window(&self.shots[vi].image, w, h);
+        v.window.request_redraw();
     }
 
     fn to_image(&self, vi: usize, p: Pt) -> Pt {
@@ -342,23 +377,32 @@ impl App {
         else {
             return;
         };
-        // Get out of the way immediately; encoding happens after.
+        // Get out of the way immediately; output happens after the loop.
         for v in &self.views {
             v.window.set_visible(false);
         }
-        let (w, h) = (img.width(), img.height());
-        self.outcome = Some(match how {
-            Finish::Copy => {
-                output::to_clipboard(&img).map(|_| format!("Copied {w}×{h} to clipboard"))
-            }
-            Finish::Save => {
-                let path = output::timestamped_path(&self.opts.save_dir);
-                output::save_png(&img, &path)
-                    .map(|_| format!("Saved {w}×{h} to {}", path.display()))
-            }
-        });
+        self.outcome = Some(Ok(match how {
+            Finish::Copy => Outcome::Copy(img),
+            Finish::Save => Outcome::Save(img),
+        }));
         el.exit();
     }
+}
+
+/// Frame buffer, dimmed backdrop and window-pixels-per-image-pixel scale for
+/// a window of `w`×`h` showing `image`.
+fn fit_to_window(image: &Pixmap, w: u32, h: u32) -> (Pixmap, Pixmap, f32) {
+    let (w, h) = (w.max(1), h.max(1));
+    let scale = w as f32 / image.width() as f32;
+    let dimmed_img = render::dimmed(image, 0.45);
+    let dimmed = if (w, h) == (image.width(), image.height()) {
+        dimmed_img
+    } else {
+        let mut d = Pixmap::new(w, h).expect("window size");
+        blit_scaled(&mut d, &dimmed_img, 0.0, 0.0, scale);
+        d
+    };
+    (Pixmap::new(w, h).expect("window size"), dimmed, scale)
 }
 
 fn draw_selection_chrome(v: &mut View, sel: Rect, handles: bool) {
@@ -413,6 +457,10 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => el.exit(),
             WindowEvent::RedrawRequested => self.render(vi),
+            WindowEvent::Resized(size) => self.resized(vi, size.width, size.height),
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                self.views[vi].ui = scale_factor as f32;
+            }
             WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
             WindowEvent::CursorMoved { position, .. } => {
                 let p = Pt::new(position.x as f32, position.y as f32);
@@ -489,5 +537,128 @@ impl ApplicationHandler for App {
             }
             _ => {}
         }
+    }
+}
+
+/// Physical geometry of a winit monitor, decoupled from winit for testing.
+struct MonitorInfo {
+    name: String,
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+/// Pair each capture with a winit monitor: by output name first, then by
+/// pixel size and position (xcap positions are scaled down on Linux, so
+/// compare against both raw and scale-adjusted coordinates), then by order.
+fn match_monitors(shots: &[MonitorShot], monitors: &[MonitorInfo]) -> Vec<Option<usize>> {
+    let mut taken = vec![false; monitors.len()];
+    let mut out = vec![None; shots.len()];
+    fn claim(out: &mut [Option<usize>], taken: &mut [bool], i: usize, j: usize) {
+        out[i] = Some(j);
+        taken[j] = true;
+    }
+    for (i, s) in shots.iter().enumerate() {
+        if s.name.is_empty() {
+            continue;
+        }
+        if let Some(j) = (0..monitors.len()).find(|&j| !taken[j] && monitors[j].name == s.name) {
+            claim(&mut out, &mut taken, i, j);
+        }
+    }
+    for (i, s) in shots.iter().enumerate() {
+        if out[i].is_some() {
+            continue;
+        }
+        let dist = |m: &MonitorInfo| {
+            let (px, py) = ((s.x as f32 * s.scale) as i64, (s.y as f32 * s.scale) as i64);
+            let d_scaled = (m.x as i64 - px).abs() + (m.y as i64 - py).abs();
+            let d_raw = (m.x as i64 - s.x as i64).abs() + (m.y as i64 - s.y as i64).abs();
+            d_scaled.min(d_raw)
+        };
+        let best = (0..monitors.len())
+            .filter(|&j| !taken[j])
+            .filter(|&j| {
+                monitors[j].width == s.image.width() && monitors[j].height == s.image.height()
+            })
+            .min_by_key(|&j| dist(&monitors[j]));
+        if let Some(j) = best {
+            claim(&mut out, &mut taken, i, j);
+        }
+    }
+    for i in 0..shots.len() {
+        if out[i].is_none()
+            && let Some(j) = (0..monitors.len()).find(|&j| !taken[j])
+        {
+            claim(&mut out, &mut taken, i, j);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shot(name: &str, x: i32, y: i32, w: u32, h: u32, scale: f32) -> MonitorShot {
+        MonitorShot {
+            name: name.into(),
+            image: Pixmap::new(w, h).unwrap(),
+            x,
+            y,
+            width: (w as f32 / scale) as u32,
+            height: (h as f32 / scale) as u32,
+            scale,
+            primary: false,
+        }
+    }
+
+    fn mon(name: &str, x: i32, y: i32, width: u32, height: u32) -> MonitorInfo {
+        MonitorInfo {
+            name: name.into(),
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn matches_by_name() {
+        let shots = [
+            shot("HDMI-1", 0, 0, 100, 50, 1.0),
+            shot("DP-1", 100, 0, 100, 50, 1.0),
+        ];
+        let mons = [mon("DP-1", 100, 0, 100, 50), mon("HDMI-1", 0, 0, 100, 50)];
+        assert_eq!(match_monitors(&shots, &mons), vec![Some(1), Some(0)]);
+    }
+
+    #[test]
+    fn falls_back_to_size_and_scaled_position() {
+        // HiDPI: xcap reports origin 960 (logical), winit 1920 (physical).
+        let shots = [
+            shot("", 960, 0, 200, 100, 2.0),
+            shot("", 0, 0, 200, 100, 2.0),
+        ];
+        let mons = [
+            mon("XWAYLAND0", 0, 0, 200, 100),
+            mon("XWAYLAND1", 1920, 0, 200, 100),
+        ];
+        assert_eq!(match_monitors(&shots, &mons), vec![Some(1), Some(0)]);
+    }
+
+    #[test]
+    fn falls_back_to_order() {
+        let shots = [shot("a", 0, 0, 10, 10, 1.0), shot("b", 10, 0, 10, 10, 1.0)];
+        let mons = [mon("x", 0, 0, 30, 30), mon("y", 30, 0, 30, 30)];
+        assert_eq!(match_monitors(&shots, &mons), vec![Some(0), Some(1)]);
+    }
+
+    #[test]
+    fn more_shots_than_monitors() {
+        let shots = [shot("a", 0, 0, 10, 10, 1.0), shot("b", 10, 0, 10, 10, 1.0)];
+        let mons = [mon("b", 10, 0, 10, 10)];
+        assert_eq!(match_monitors(&shots, &mons), vec![None, Some(0)]);
     }
 }

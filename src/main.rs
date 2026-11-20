@@ -38,10 +38,18 @@ enum Cmd {
         #[arg(long)]
         clipboard: bool,
     },
+    /// Internal: hold the clipboard contents piped on stdin (Linux).
+    #[cfg(target_os = "linux")]
+    #[command(name = output::linux_clipboard::SUBCOMMAND, hide = true)]
+    ServeClipboard,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    #[cfg(target_os = "linux")]
+    if let Some(Cmd::ServeClipboard) = cli.cmd {
+        return output::linux_clipboard::serve();
+    }
     let t0 = Instant::now();
     let trace = std::env::var_os("FLUXSHOT_TRACE").is_some();
     if cli.delay > 0 {
@@ -60,13 +68,25 @@ fn main() -> Result<()> {
 
     match cli.cmd.unwrap_or(Cmd::Gui) {
         Cmd::Gui => {
-            let opts = app::Options {
-                save_dir,
-                t0,
-                trace,
-            };
-            if let Some(msg) = app::run(shots, opts)? {
-                println!("{msg}");
+            let opts = app::Options { t0, trace };
+            // Output happens after the overlay is gone, so slow encoding or
+            // clipboard hand-off never keeps a frozen window on screen.
+            match app::run(shots, opts)? {
+                Some(app::Outcome::Copy(img)) => {
+                    output::to_clipboard(&img)?;
+                    println!("Copied {}×{} to clipboard", img.width(), img.height());
+                }
+                Some(app::Outcome::Save(img)) => {
+                    let path = output::timestamped_path(&save_dir);
+                    output::save_png(&img, &path)?;
+                    println!(
+                        "Saved {}×{} to {}",
+                        img.width(),
+                        img.height(),
+                        path.display()
+                    );
+                }
+                None => {}
             }
         }
         Cmd::Full { clipboard: true } => {
@@ -78,6 +98,8 @@ fn main() -> Result<()> {
                 shot.image.height()
             );
         }
+        #[cfg(target_os = "linux")]
+        Cmd::ServeClipboard => unreachable!("handled above"),
         Cmd::Full { clipboard: false } => {
             for shot in &shots {
                 let path = output::timestamped_path(&save_dir);
