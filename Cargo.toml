@@ -1,0 +1,32 @@
+[package]
+name = "fluxshot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+arboard = "3.7.0"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+clap = { version = "4.6.9", features = ["derive"] }
+directories = "6.0.0"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+softbuffer = "0.4.8"
+tiny-skia = "0.12.0"
+winit = "0.30.13"
+xcap = "0.9.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+strip = true
+
+# Pixel loops are painfully slow unoptimized; keep dev builds usable.
+[profile.dev.package."*"]
+opt-level = 3
+[profile.dev]
+opt-level = 1
