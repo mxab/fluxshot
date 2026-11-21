@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# Built natively on the matching runner by .github/workflows/release.yml.
+version: 2
+project_name: fluxshot
+
+builds:
+  - builder: rust
+    binary: fluxshot
+    tool: cargo
+    command: build
+    flags: [--release]
+    targets:
+      - x86_64-unknown-linux-gnu
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [README.md, LICENSE-MIT, LICENSE-APACHE]
+
+checksum:
+  split: true
+
+changelog:
+  disable: true
+
+release:
+  draft: true
+  use_existing_draft: true
+  name_template: "{{ .Tag }}"
+  mode: keep-existing
