@@ -59,6 +59,52 @@ jobs:
             libxcb-randr0-dev libxkbcommon-dev libwayland-dev libdbus-1-dev \
             libegl-dev libgbm-dev
 
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      # Optional Developer ID signing + notarization for FluxShot.app. Without
+      # these secrets packaging/macos/build-app.sh falls back to ad-hoc signing.
+      - name: Import Developer ID certificate
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_KEY_P8: ${{ secrets.MACOS_NOTARY_KEY_P8 }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ] || [ -z "$MACOS_SIGN_IDENTITY" ]; then
+            echo "No Developer ID secrets; FluxShot.app will be ad-hoc signed."
+            exit 0
+          fi
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          kc_pass=$(openssl rand -hex 16)
+          security create-keychain -p "$kc_pass" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kc_pass" "$kc"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kc_pass" "$kc"
+          # Keep the existing keychains in the search list (one word each).
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "MACOS_SIGN_IDENTITY=$MACOS_SIGN_IDENTITY" >> "$GITHUB_ENV"
+          if [ -n "$MACOS_NOTARY_KEY_P8" ] && [ -n "$MACOS_NOTARY_KEY_ID" ] && [ -n "$MACOS_NOTARY_ISSUER" ]; then
+            echo "$MACOS_NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+            {
+              echo "MACOS_NOTARY_KEY=$RUNNER_TEMP/notary.p8"
+              echo "MACOS_NOTARY_KEY_ID=$MACOS_NOTARY_KEY_ID"
+              echo "MACOS_NOTARY_ISSUER=$MACOS_NOTARY_ISSUER"
+            } >> "$GITHUB_ENV"
+          fi
+
       - uses: sigstore/cosign-installer@v3
 
       - uses: goreleaser/goreleaser-action@v7
@@ -77,3 +123,69 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+
+  # Package manager manifests. These run only after the release is public, so
+  # the download URLs work, and are skipped for pre-releases (-rc tags) and
+  # when the tokens aren't configured.
+  homebrew-scoop:
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    env:
+      # Fine-grained PAT with contents:write on mxab/homebrew-tap and mxab/scoop-bucket.
+      PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.PACKAGES_TOKEN != ''
+
+      - name: Update Homebrew cask and Scoop manifest
+        if: env.PACKAGES_TOKEN != ''
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          cd "$RUNNER_TEMP"
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            -p "fluxshot_${version}_darwin_universal_app.zip.sha256" \
+            -p "fluxshot_${version}_windows_amd64.zip.sha256"
+          mac_sha=$(cat "fluxshot_${version}_darwin_universal_app.zip.sha256")
+          win_sha=$(cat "fluxshot_${version}_windows_amd64.zip.sha256")
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # publish <repo> <template> <path in repo> <sha256>
+          publish() {
+            rm -rf repo
+            git clone --depth 1 "https://x-access-token:${PACKAGES_TOKEN}@github.com/$1.git" repo
+            mkdir -p "repo/$(dirname "$3")"
+            sed -e "s/@VERSION@/$version/g" -e "s/@SHA256@/$4/g" \
+              "$GITHUB_WORKSPACE/$2" > "repo/$3"
+            git -C repo add "$3"
+            if git -C repo diff --cached --quiet; then
+              echo "$1: already up to date"
+            else
+              git -C repo commit -m "fluxshot $version"
+              git -C repo push
+            fi
+          }
+          publish mxab/homebrew-tap packaging/macos/fluxshot.rb Casks/fluxshot.rb "$mac_sha"
+          publish mxab/scoop-bucket packaging/windows/fluxshot.json bucket/fluxshot.json "$win_sha"
+
+  # Opens a PR on microsoft/winget-pkgs for the setup.exe. The package
+  # (mxab.FluxShot) must have been submitted once by hand, and WINGET_TOKEN is
+  # a classic PAT (public_repo) for an account with a fork of winget-pkgs.
+  winget:
+    needs: publish
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: windows-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@v2
+        if: env.WINGET_TOKEN != ''
+        with:
+          identifier: mxab.FluxShot
+          installers-regex: '_windows_amd64_setup\.exe$'
+          release-tag: ${{ github.ref_name }}
+          token: ${{ secrets.WINGET_TOKEN }}

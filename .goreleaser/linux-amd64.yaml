@@ -17,6 +17,48 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files: [README.md, LICENSE-MIT, LICENSE-APACHE]
 
+nfpms:
+  - package_name: fluxshot
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    vendor: mxab
+    homepage: https://github.com/mxab/fluxshot
+    maintainer: mxab <https://github.com/mxab>
+    description: Tiny, fast screenshot and annotation tool (X11 and Wayland).
+    license: MIT OR Apache-2.0
+    section: graphics
+    formats: [deb, rpm]
+    bindir: /usr/bin
+    contents:
+      - src: packaging/linux/io.github.mxab.fluxshot.desktop
+        dst: /usr/share/applications/io.github.mxab.fluxshot.desktop
+      - src: assets/icon.svg
+        dst: /usr/share/icons/hicolor/scalable/apps/io.github.mxab.fluxshot.svg
+      - src: assets/icon-256.png
+        dst: /usr/share/icons/hicolor/256x256/apps/io.github.mxab.fluxshot.png
+      - src: README.md
+        dst: /usr/share/doc/fluxshot/README.md
+      - src: LICENSE-MIT
+        dst: /usr/share/doc/fluxshot/LICENSE-MIT
+      - src: LICENSE-APACHE
+        dst: /usr/share/doc/fluxshot/LICENSE-APACHE
+    # Libraries the binary links against (PipeWire for portal capture, GBM,
+    # Wayland client); the rest is loaded at runtime or pure Rust.
+    overrides:
+      deb:
+        dependencies:
+          - libpipewire-0.3-0t64 | libpipewire-0.3-0
+          - libgbm1
+          - libwayland-client0
+        recommends:
+          - xdg-desktop-portal
+      rpm:
+        dependencies:
+          - pipewire-libs
+          - mesa-libgbm
+          - libwayland-client
+        recommends:
+          - xdg-desktop-portal
+
 checksum:
   split: true
 

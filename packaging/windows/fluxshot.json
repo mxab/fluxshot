@@ -1,0 +1,28 @@
+{
+    "version": "@VERSION@",
+    "description": "Tiny, fast screenshot and annotation tool",
+    "homepage": "https://github.com/mxab/fluxshot",
+    "license": "MIT|Apache-2.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/mxab/fluxshot/releases/download/v@VERSION@/fluxshot_@VERSION@_windows_amd64.zip",
+            "hash": "@SHA256@"
+        }
+    },
+    "bin": "fluxshot.exe",
+    "shortcuts": [
+        ["fluxshot.exe", "FluxShot", "tray"],
+        ["fluxshot.exe", "FluxShot Capture"]
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/mxab/fluxshot/releases/download/v$version/fluxshot_$version_windows_amd64.zip",
+                "hash": {
+                    "url": "$url.sha256"
+                }
+            }
+        }
+    }
+}

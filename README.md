@@ -34,7 +34,8 @@ clipboard before you've let go of the mouse. That's the whole workflow.
 
 ## 🚀 Quick start
 
-1. Grab the archive for your platform from the [**latest release**](https://github.com/mxab/fluxshot/releases/latest) and unpack it.
+1. [Install](#-install) it: `brew install --cask mxab/tap/fluxshot`, `scoop install fluxshot`
+   (after adding the bucket), the DMG / setup.exe / .deb / .rpm, or just the binary.
 2. Run `fluxshot`.
 3. Drag a box around something, draw on it if you like, and press **`Enter`**.
 4. Paste it anywhere. 🎉
@@ -44,24 +45,68 @@ clipboard before you've let go of the mouse. That's the whole workflow.
 
 ## 📦 Install
 
-### Prebuilt binaries
+Every [release](https://github.com/mxab/fluxshot/releases/latest) has packages
+for each platform, plus a plain binary in a `.tar.gz`/`.zip` if you'd rather manage it yourself.
 
-| Platform | Download |
+### 🍎 macOS
+
+**Homebrew** (recommended):
+
+```sh
+brew install --cask mxab/tap/fluxshot
+```
+
+This installs `FluxShot.app` and links the `fluxshot` command to the binary
+inside it. **Or** download `fluxshot_<version>_darwin_universal.dmg` and drag
+FluxShot to *Applications*.
+
+Opening **FluxShot.app** starts the [tray](#-tray-mode). The `fluxshot` command
+works as before. Both are the same binary, so they share one Screen Recording permission.
+
+> **Not notarized yet.** The app is only ad-hoc signed. If you installed from
+> the DMG, the first launch is blocked: open *System Settings → Privacy &
+> Security* and click **Open Anyway** (Homebrew clears the quarantine flag for you).
+> macOS also asks for Screen Recording permission again after each update.
+
+### 🪟 Windows
+
+- **Installer:** `fluxshot_<version>_windows_amd64_setup.exe`. It installs per user,
+  so no admin rights are needed. It adds *FluxShot* (tray) and *FluxShot Capture* to the Start menu, can put
+  `fluxshot` on your `PATH` and can start the tray at sign-in.
+- **winget:** `winget install mxab.FluxShot` (uses the installer above).
+- **Scoop:**
+  ```powershell
+  scoop bucket add mxab https://github.com/mxab/scoop-bucket
+  scoop install fluxshot
+  ```
+
+The binaries aren't code-signed yet, so SmartScreen may warn you on first run.
+Click *More info → Run anyway*.
+
+### 🐧 Linux
+
+Install the `.deb` or `.rpm` from the release. It adds `fluxshot` and an app
+menu entry (with a *Start Tray* action):
+
+```sh
+sudo apt install ./fluxshot_<version>_linux_amd64.deb     # Debian/Ubuntu
+sudo dnf install ./fluxshot_<version>_linux_amd64.rpm     # Fedora
+```
+
+ARM64 packages are there too. Or unpack the `.tar.gz` and put `fluxshot` on your `PATH`.
+
+| Archive | Platform |
 |---|---|
-| macOS (Apple Silicon) | `fluxshot_<version>_darwin_arm64.tar.gz` |
-| macOS (Intel) | `fluxshot_<version>_darwin_amd64.tar.gz` |
-| Linux x86_64 | `fluxshot_<version>_linux_amd64.tar.gz` |
-| Linux ARM64 | `fluxshot_<version>_linux_arm64.tar.gz` |
-| Windows x64 | `fluxshot_<version>_windows_amd64.zip` |
+| `fluxshot_<version>_darwin_arm64.tar.gz` / `_darwin_amd64.tar.gz` | macOS (binary only) |
+| `fluxshot_<version>_linux_amd64.tar.gz` / `_linux_arm64.tar.gz` | Linux |
+| `fluxshot_<version>_windows_amd64.zip` | Windows |
 
-All of them are on the [releases page](https://github.com/mxab/fluxshot/releases).
-
-> **macOS:** the binaries aren't signed yet. After downloading, run
-> `xattr -d com.apple.quarantine fluxshot` once before the first launch.
+> **macOS, bare binary:** run `xattr -d com.apple.quarantine fluxshot` once
+> before the first launch.
 
 #### Verifying a download
 
-Every archive comes with a `.sha256` checksum file. Each checksum file is signed
+Every download (archives, DMG, installers, packages) comes with a `.sha256` checksum file. Each checksum file is signed
 with [Sigstore cosign](https://docs.sigstore.dev/) by the release workflow
 (keyless), so you can check that it came from this repository's CI:
 
@@ -209,12 +254,12 @@ Files go to the trash, not straight to deletion. If `filename` starts with a
 
 ### 🍎 macOS
 
-Grant **Screen Recording** permission to FluxShot (or to the terminal you launch it from)
-in *System Settings → Privacy & Security*. Without it, macOS quietly hands back
-a picture of just your wallpaper.
+Grant **Screen Recording** permission to FluxShot (or, for the bare binary, to the
+terminal you launch it from) in *System Settings → Privacy & Security*. Without it,
+macOS quietly hands back a picture of just your wallpaper.
 
-Notifications from the bare binary may show up under a generic sender, because
-FluxShot isn't packaged as an `.app` bundle yet. Set `notify = false` if they bother you.
+Notifications from the bare binary may show up under a generic sender. Install
+the app (Homebrew or DMG) to avoid that, or set `notify = false`.
 
 ### 🐧 Linux
 
@@ -280,6 +325,20 @@ Releases are built by [GoReleaser](https://goreleaser.com) in
 `.github/workflows/release.yml`. Each platform builds natively on its own runner
 from its own config in `.goreleaser/`. The jobs upload into a shared draft
 release, which is published once every build succeeds.
+
+Besides the archives, the macOS job builds `FluxShot.app` (DMG + zip,
+`packaging/macos/build-app.sh`), the Windows job builds the Inno Setup installer
+(`packaging/windows/`), and the Linux jobs build `.deb`/`.rpm` with nfpm. Once
+the release is published, follow-up jobs update the Homebrew cask, the Scoop
+manifest and winget (stable tags only). These optional repository secrets turn
+the extras on:
+
+| Secret | Enables |
+|---|---|
+| `PACKAGES_TOKEN` | Pushing to `mxab/homebrew-tap` and `mxab/scoop-bucket` (fine-grained PAT, contents: write) |
+| `WINGET_TOKEN` | winget PRs (classic PAT, `public_repo`; needs a fork of `microsoft/winget-pkgs` and a first manual submission) |
+| `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `MACOS_SIGN_IDENTITY` | Developer ID signing instead of ad-hoc (base64 `.p12`) |
+| `MACOS_NOTARY_KEY_P8`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER` | Notarization (App Store Connect API key) |
 
 ```sh
 # Bump `version` in Cargo.toml, commit, then:

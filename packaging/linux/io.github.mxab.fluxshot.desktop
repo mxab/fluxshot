@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Name=FluxShot
+GenericName=Screenshot Tool
+Comment=Snap a region, annotate it, copy or save
+Exec=fluxshot
+Icon=io.github.mxab.fluxshot
+Terminal=false
+Categories=Utility;Graphics;
+Keywords=screenshot;capture;annotate;snip;
+StartupNotify=false
+Actions=tray;full;
+
+[Desktop Action tray]
+Name=Start Tray
+Exec=fluxshot tray
+
+[Desktop Action full]
+Name=Save All Screens
+Exec=fluxshot full
