@@ -29,7 +29,8 @@ clipboard before you've let go of the mouse. That's the whole workflow.
 - **Annotate in place.** Arrows, boxes, ellipses, a highlighter, freehand pen, and pixelate for hiding secrets.
 - **One key to finish.** `Enter` copies to the clipboard, `Cmd/Ctrl+S` saves a PNG.
 - **Native everywhere.** macOS, Windows, and Linux on both X11 *and* Wayland (GNOME, KDE, sway, Hyprland…).
-- **Just a binary.** No runtime, no tray icon, no daemon running in the background. It starts, does its job, and gets out of your way.
+- **Just a binary.** No runtime and nothing running in the background. It starts, does its job, and gets out of your way.
+- **Optional tray.** Want a hotkey, a history of recent shots and automatic cleanup? Run `fluxshot tray`. It's opt-in.
 
 ## 🚀 Quick start
 
@@ -98,7 +99,8 @@ Linux and Windows need a few extra build dependencies. They're listed in the
 | `fluxshot` | Select a region, annotate it, then copy or save |
 | `fluxshot full` | Save every monitor straight to PNG, no UI |
 | `fluxshot full --clipboard` | Copy the primary monitor to the clipboard, no UI |
-| `--path <dir>` | Where to save PNGs (default: `~/Pictures/FluxShot`) |
+| `fluxshot tray` | Stay in the system tray (see [Tray mode](#-tray-mode)) |
+| `--path <dir>` | Where to save PNGs (default: `save_dir` setting, else `~/Pictures/FluxShot`) |
 | `--delay <ms>` | Wait before capturing |
 | `FLUXSHOT_TRACE=1 fluxshot` | Print latency timings, so you can see how fast it really is |
 
@@ -117,6 +119,59 @@ FLUXSHOT_TRACE=1 fluxshot
 
 If you finish without selecting anything, FluxShot takes the whole monitor under
 your pointer.
+
+## 🗂️ Tray mode
+
+`fluxshot tray` puts a ⚡ icon in the menu bar or system tray. From there you can:
+
+- **Capture.** Click *Capture* or press the global hotkey (`Cmd/Ctrl+Shift+2` by
+  default). On Linux, left-clicking the icon also captures.
+- **Recent.** See your last screenshots, then copy one to the clipboard again,
+  open it, show it in the file manager, or move it to the trash.
+- **Prune.** Move screenshots that are older or larger than your limits to the
+  trash. This also runs automatically when the tray starts and once a day.
+- **Launch at login** with a checkbox.
+- **Edit and reload settings.**
+
+Plain `fluxshot` still works the same, with or without the tray running.
+
+## ⚙️ Settings
+
+Settings live in `config.toml`. *Edit settings…* in the tray creates it with
+every option commented out. Its location:
+
+| Platform | Path |
+|---|---|
+| macOS | `~/Library/Application Support/fluxshot/config.toml` |
+| Linux | `~/.config/fluxshot/config.toml` |
+| Windows | `%APPDATA%\fluxshot\config\config.toml` |
+
+Every key is optional. Command-line flags take precedence.
+
+```toml
+save_dir = "~/Pictures/FluxShot"
+filename = "fluxshot_%Y-%m-%d_%H-%M-%S"  # strftime; ".png" is appended
+save_on_copy = false                     # Enter also saves a PNG (full history)
+png_compression = "fast"                 # fast | default | best
+notify = true                            # notification after copy/save
+# autostart = true                       # if set, enforced on tray start; else use the menu toggle
+
+[hotkey]
+capture = "CmdOrCtrl+Shift+2"            # "" disables; tray mode only
+
+[retention]                              # 0 = unlimited
+max_age_days = 0
+max_files = 0
+max_size_mb = 0
+
+[tray]
+recent_count = 10
+```
+
+**Pruning is careful.** It only touches `.png` files directly inside `save_dir`
+whose names start with the fixed part of `filename` (`fluxshot_` by default).
+Files go to the trash, not straight to deletion. If `filename` starts with a
+`%` specifier, pruning is turned off.
 
 ## ⌨️ Keyboard shortcuts
 
@@ -158,6 +213,9 @@ Grant **Screen Recording** permission to FluxShot (or to the terminal you launch
 in *System Settings → Privacy & Security*. Without it, macOS quietly hands back
 a picture of just your wallpaper.
 
+Notifications from the bare binary may show up under a generic sender, because
+FluxShot isn't packaged as an `.app` bundle yet. Set `notify = false` if they bother you.
+
 ### 🐧 Linux
 
 FluxShot works on X11 and Wayland, including GNOME, KDE and wlroots compositors
@@ -180,8 +238,12 @@ sudo dnf install pkgconf clang clang-devel pipewire-devel libxcb-devel \
 
 **Good to know**
 
-- **Hotkey:** FluxShot doesn't grab a global hotkey itself. Bind `fluxshot` to a
-  key such as `Print` in your desktop's keyboard settings, or in your sway/Hyprland config.
+- **Hotkey:** bind `fluxshot` to a key such as `Print` in your desktop's keyboard
+  settings, or in your sway/Hyprland config. The tray's own hotkey only works on
+  X11, because Wayland doesn't allow apps to grab global keys.
+- **Tray:** FluxShot uses the StatusNotifierItem protocol. KDE, waybar and most panels
+  support it out of the box. GNOME needs the
+  [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/).
 - **Wayland:** monitors are discovered through XWayland, so XWayland must be enabled.
   It is by default on GNOME, KDE and sway. GNOME and KDE capture through the
   desktop portal and may ask for screenshot permission the first time.
@@ -199,8 +261,8 @@ Visual Studio C++ Build Tools.
 
 **Good to know**
 
-- **Hotkey:** FluxShot doesn't grab a global hotkey itself. Set a *Shortcut key* on a desktop or
-  Start menu shortcut to `fluxshot.exe`, or use PowerToys Keyboard Manager.
+- **Hotkey:** run `fluxshot tray` and use its hotkey. You can also set a *Shortcut key*
+  on a desktop or Start menu shortcut to `fluxshot.exe`, or use PowerToys Keyboard Manager.
   To use `PrtScn`, first turn off *Use the Print screen key to open screen
   capture* in *Settings → Accessibility → Keyboard*.
 - **Console:** release builds don't open a console window. When started from a

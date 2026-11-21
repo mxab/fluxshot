@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use tiny_skia::Pixmap;
 
+use crate::config::Compression;
+
 /// Straight-alpha RGBA bytes (our images are opaque, but demultiply anyway
 /// so translucent edge cases stay correct).
 fn rgba(pm: &Pixmap) -> Vec<u8> {
@@ -123,18 +125,20 @@ pub fn default_dir() -> PathBuf {
         .join("FluxShot")
 }
 
-pub fn timestamped_path(dir: &Path) -> PathBuf {
-    let ts = chrono::Local::now().format("%Y-%m-%d_%H-%M-%S");
-    let mut path = dir.join(format!("fluxshot_{ts}.png"));
+/// `template` is a chrono strftime pattern (validated by `config`);
+/// `.png` is appended and a `_2`, `_3`… suffix avoids overwriting.
+pub fn timestamped_path(dir: &Path, template: &str) -> PathBuf {
+    let stem = chrono::Local::now().format(template).to_string();
+    let mut path = dir.join(format!("{stem}.png"));
     let mut n = 2;
     while path.exists() {
-        path = dir.join(format!("fluxshot_{ts}_{n}.png"));
+        path = dir.join(format!("{stem}_{n}.png"));
         n += 1;
     }
     path
 }
 
-pub fn save_png(pm: &Pixmap, path: &Path) -> Result<()> {
+pub fn save_png(pm: &Pixmap, path: &Path, compression: Compression) -> Result<()> {
     use image::ImageEncoder;
     use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 
@@ -143,10 +147,15 @@ pub fn save_png(pm: &Pixmap, path: &Path) -> Result<()> {
     }
     let file =
         std::fs::File::create(path).with_context(|| format!("creating {}", path.display()))?;
-    // Fast compression: screenshots compress well anyway and latency matters more.
+    // Fast by default: screenshots compress well anyway and latency matters more.
+    let compression = match compression {
+        Compression::Fast => CompressionType::Fast,
+        Compression::Default => CompressionType::Default,
+        Compression::Best => CompressionType::Best,
+    };
     PngEncoder::new_with_quality(
         std::io::BufWriter::new(file),
-        CompressionType::Fast,
+        compression,
         FilterType::Adaptive,
     )
     .write_image(
@@ -157,4 +166,49 @@ pub fn save_png(pm: &Pixmap, path: &Path) -> Result<()> {
     )
     .context("encoding PNG")?;
     Ok(())
+}
+
+/// Load a saved screenshot, e.g. to copy it again from the tray.
+pub fn load_png(path: &Path) -> Result<Pixmap> {
+    let img = image::open(path)
+        .with_context(|| format!("reading {}", path.display()))?
+        .to_rgba8();
+    let (w, h) = img.dimensions();
+    let mut pm = Pixmap::new(w, h).context("image has zero size")?;
+    for (dst, src) in pm.pixels_mut().iter_mut().zip(img.pixels()) {
+        let [r, g, b, a] = src.0;
+        *dst = tiny_skia::ColorU8::from_rgba(r, g, b, a).premultiply();
+    }
+    Ok(pm)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn template_names_and_collisions() {
+        let dir = std::env::temp_dir().join(format!("fluxshot-out-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = timestamped_path(&dir, "shot_fixed");
+        assert_eq!(first, dir.join("shot_fixed.png"));
+        std::fs::write(&first, b"x").unwrap();
+        assert_eq!(
+            timestamped_path(&dir, "shot_fixed"),
+            dir.join("shot_fixed_2.png")
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn png_round_trip() {
+        let dir = std::env::temp_dir().join(format!("fluxshot-rt-{}", std::process::id()));
+        let path = dir.join("a.png");
+        let mut pm = Pixmap::new(3, 2).unwrap();
+        pm.fill(tiny_skia::Color::from_rgba8(10, 200, 30, 255));
+        save_png(&pm, &path, Compression::Best).unwrap();
+        let back = load_png(&path).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(back.data(), pm.data());
+    }
 }
