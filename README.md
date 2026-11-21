@@ -144,6 +144,9 @@ a picture of just your wallpaper.
 FluxShot works on X11 and Wayland, including GNOME, KDE and wlroots compositors
 such as sway and Hyprland.
 
+The prebuilt Linux binaries need glibc 2.39 or newer (Ubuntu 24.04, Debian 13,
+Fedora 40 or later). Building from source needs PipeWire 1.0 or newer development headers.
+
 **Build dependencies**
 
 ```sh
