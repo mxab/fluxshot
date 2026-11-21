@@ -22,6 +22,7 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --draft --generate-notes --verify-tag
           --title "$GITHUB_REF_NAME"
+          ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
 
   build:
     needs: draft

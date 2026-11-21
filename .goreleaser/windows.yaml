@@ -41,3 +41,4 @@ release:
   use_existing_draft: true
   name_template: "{{ .Tag }}"
   mode: keep-existing
+  prerelease: auto

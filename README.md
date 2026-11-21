@@ -73,7 +73,8 @@ cosign verify-blob \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   "$ARCHIVE.sha256"
 
-shasum -a 256 -c "$ARCHIVE.sha256"
+# The .sha256 file holds just the hash, so pair it with the file name:
+echo "$(cat "$ARCHIVE.sha256")  $ARCHIVE" | shasum -a 256 -c
 ```
 
 ### Build from source
