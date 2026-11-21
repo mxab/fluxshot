@@ -63,7 +63,7 @@ fn main() -> Result<()> {
     if let Some(Cmd::ServeClipboard) = cli.cmd {
         return output::linux_clipboard::serve();
     }
-    if let Some(Cmd::Tray) = cli.cmd {
+    if matches!(cli.cmd, Some(Cmd::Tray)) || (cli.cmd.is_none() && launched_as_app()) {
         return tray::run(cli.path);
     }
     let cfg = config::Config::load_or_default();
@@ -145,4 +145,11 @@ fn main() -> Result<()> {
         eprintln!("[trace] total {:?}", t0.elapsed());
     }
     Ok(())
+}
+
+/// Opening FluxShot.app from Finder, Launchpad or the Dock should start the
+/// tray rather than a one-off capture. Its Info.plist sets this variable via
+/// `LSEnvironment`, which only applies to launches through LaunchServices.
+fn launched_as_app() -> bool {
+    std::env::var_os("FLUXSHOT_APP_LAUNCH").is_some()
 }

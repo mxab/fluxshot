@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- FluxShot app icon: same bolt and accent as src/tray/icon.rs, on a 1024 canvas
+     with the standard macOS margin (824px tile). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E90FF"/>
+      <stop offset="1" stop-color="#0062E0"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <!-- BOLT from the 24x24 grid (centered on 12,12), with some breathing room. -->
+  <g transform="translate(512 512) scale(27) translate(-12 -12)">
+    <path d="M13.5 1.5 L4 13.5 L11 13.5 L10 22.5 L20 9.5 L13 9.5 Z" fill="#FFFFFF"/>
+  </g>
+</svg>

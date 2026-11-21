@@ -4,7 +4,8 @@ version: 2
 project_name: fluxshot
 
 builds:
-  - builder: rust
+  - id: fluxshot
+    builder: rust
     binary: fluxshot
     tool: cargo
     command: build
@@ -13,13 +14,26 @@ builds:
       - aarch64-apple-darwin
       - x86_64-apple-darwin
 
+# One arm64+x86_64 binary for FluxShot.app. The per-arch tarballs stay.
+universal_binaries:
+  - id: universal
+    ids: [fluxshot]
+    replace: false
+    hooks:
+      post: packaging/macos/build-app.sh "{{ .Path }}" "{{ .Version }}" dist/macos-app
+
 archives:
-  - formats: [tar.gz]
+  - id: cli
+    ids: [fluxshot]
+    formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files: [README.md, LICENSE-MIT, LICENSE-APACHE]
 
 checksum:
   split: true
+  extra_files:
+    # FluxShot.app as DMG and zip (for the Homebrew cask), from the hook above.
+    - glob: dist/macos-app/*
 
 signs:
   - cmd: cosign
@@ -40,3 +54,6 @@ release:
   name_template: "{{ .Tag }}"
   mode: keep-existing
   prerelease: auto
+  extra_files:
+    # FluxShot.app as DMG and zip (for the Homebrew cask), from the hook above.
+    - glob: dist/macos-app/*

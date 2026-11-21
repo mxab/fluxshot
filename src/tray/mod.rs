@@ -216,6 +216,9 @@ impl Controller {
         }
         let exe = std::env::current_exe().context("locating fluxshot executable")?;
         let mut cmd = Command::new(exe);
+        // Explicit subcommand and no app-launch marker, or the child would
+        // start another tray instead of the overlay (see `launched_as_app`).
+        cmd.arg("gui").env_remove("FLUXSHOT_APP_LAUNCH");
         if let Some(p) = &self.path_override {
             cmd.arg("--path").arg(p);
         }
@@ -349,9 +352,14 @@ fn recent_label(s: &library::Shot) -> String {
 
 fn auto_launch() -> Result<auto_launch::AutoLaunch> {
     let exe = std::env::current_exe().context("locating fluxshot executable")?;
+    let exe = exe.to_string_lossy();
+    // The Run key value is a command line, so quote the path (profiles often
+    // contain spaces). Matches what the installer writes (packaging/windows).
+    #[cfg(windows)]
+    let exe = format!("\"{exe}\"");
     let mut b = auto_launch::AutoLaunchBuilder::new();
     b.set_app_name("FluxShot")
-        .set_app_path(&exe.to_string_lossy())
+        .set_app_path(&exe)
         .set_args(&["tray"])
         .set_macos_launch_mode(auto_launch::MacOSLaunchMode::LaunchAgent)
         .set_windows_enable_mode(auto_launch::WindowsEnableMode::CurrentUser);

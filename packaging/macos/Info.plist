@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>FluxShot</string>
+	<key>CFBundleExecutable</key>
+	<string>fluxshot</string>
+	<key>CFBundleIconFile</key>
+	<string>fluxshot</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.mxab.fluxshot</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>FluxShot</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<!-- Set only when launched from Finder/Dock (not via the CLI symlink),
+	     so `fluxshot` without arguments starts the tray. See src/main.rs. -->
+	<key>LSEnvironment</key>
+	<dict>
+		<key>FLUXSHOT_APP_LAUNCH</key>
+		<string>1</string>
+	</dict>
+	<!-- Menu bar app: no Dock icon or app menu. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT OR Apache-2.0</string>
+</dict>
+</plist>

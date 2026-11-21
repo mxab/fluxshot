@@ -11,6 +11,9 @@ builds:
     flags: [--release]
     targets:
       - x86_64-pc-windows-msvc
+    hooks:
+      # Per-user setup.exe (Inno Setup), uploaded via the extra_files below.
+      post: pwsh -NoProfile -File packaging/windows/build-installer.ps1 "{{ .Path }}" "{{ .Version }}" dist/windows-installer
 
 archives:
   - formats: [tar.gz]
@@ -22,6 +25,8 @@ archives:
 
 checksum:
   split: true
+  extra_files:
+    - glob: dist/windows-installer/*.exe
 
 signs:
   - cmd: cosign
@@ -42,3 +47,5 @@ release:
   name_template: "{{ .Tag }}"
   mode: keep-existing
   prerelease: auto
+  extra_files:
+    - glob: dist/windows-installer/*.exe
