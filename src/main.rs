@@ -1,3 +1,6 @@
+// No console window when launched from a hotkey (see platform_windows::init).
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod annotation;
 mod app;
 mod capture;
@@ -5,6 +8,8 @@ mod geom;
 mod output;
 #[cfg(target_os = "macos")]
 mod platform_macos;
+#[cfg(windows)]
+mod platform_windows;
 mod render;
 mod state;
 mod toolbar;
@@ -45,6 +50,8 @@ enum Cmd {
 }
 
 fn main() -> Result<()> {
+    #[cfg(windows)]
+    platform_windows::init();
     let cli = Cli::parse();
     #[cfg(target_os = "linux")]
     if let Some(Cmd::ServeClipboard) = cli.cmd {

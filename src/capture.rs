@@ -8,10 +8,10 @@ pub struct MonitorShot {
     /// Physical-pixel capture of the monitor (opaque, so premultiplied == straight).
     pub image: Pixmap,
     /// Output name (e.g. `DP-1`), used to match winit monitors on Linux.
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    #[cfg_attr(not(any(target_os = "linux", windows)), allow(dead_code))]
     pub name: String,
     /// Monitor origin as reported by xcap (logical points on macOS and Linux,
-    /// physical pixels on Windows).
+    /// physical pixels on Windows, given per-monitor DPI awareness).
     pub x: i32,
     pub y: i32,
     /// Monitor size in the same units as `x`/`y`.
@@ -31,20 +31,31 @@ pub fn capture_all() -> Result<Vec<MonitorShot>> {
     let shots: Vec<Result<MonitorShot>> = if is_wayland() {
         monitors.iter().map(capture_one).collect()
     } else {
-        std::thread::scope(|s| {
-            let handles: Vec<_> = monitors
-                .iter()
-                .map(|m| s.spawn(move || capture_one(m)))
-                .collect();
-            handles
-                .into_iter()
-                .map(|h| h.join().expect("capture thread panicked"))
-                .collect()
-        })
+        capture_parallel(&monitors)
     };
     let shots: Vec<MonitorShot> = shots.into_iter().collect::<Result<_>>()?;
     anyhow::ensure!(!shots.is_empty(), "no monitors found");
     Ok(shots)
+}
+
+#[cfg(not(windows))]
+fn capture_parallel(monitors: &[xcap::Monitor]) -> Vec<Result<MonitorShot>> {
+    std::thread::scope(|s| {
+        let handles: Vec<_> = monitors
+            .iter()
+            .map(|m| s.spawn(move || capture_one(m)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("capture thread panicked"))
+            .collect()
+    })
+}
+
+/// xcap's `Monitor` isn't `Send` on Windows, so capture in sequence there.
+#[cfg(windows)]
+fn capture_parallel(monitors: &[xcap::Monitor]) -> Vec<Result<MonitorShot>> {
+    monitors.iter().map(capture_one).collect()
 }
 
 pub fn is_wayland() -> bool {
@@ -52,10 +63,12 @@ pub fn is_wayland() -> bool {
 }
 
 fn capture_one(m: &xcap::Monitor) -> Result<MonitorShot> {
-    let img = m.capture_image().context(
-        "capturing screen (on macOS grant Screen Recording permission in \
-         System Settings → Privacy & Security)",
-    )?;
+    let img = m.capture_image().context(if cfg!(target_os = "macos") {
+        "capturing screen (grant Screen Recording permission in \
+         System Settings → Privacy & Security)"
+    } else {
+        "capturing screen"
+    })?;
     let (w, h) = img.dimensions();
     let mut data = img.into_raw();
     // Force opaque: some backends leave alpha at 0, which would make the

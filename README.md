@@ -40,6 +40,18 @@ sudo dnf install pkgconf clang clang-devel pipewire-devel libxcb-devel \
   that serves the image (X11/Wayland clipboards are owned by a live process,
   same as `xclip`/`wl-copy`). It exits as soon as something else is copied.
 
+### Windows
+
+Build with the MSVC toolchain (`rustup default stable-msvc`, plus the Visual
+Studio C++ Build Tools). Windows 10 1703 or newer.
+
+- There is no built-in global hotkey: set a "Shortcut key" on a desktop/Start
+  menu shortcut to `fluxshot.exe`, or use PowerToys Keyboard Manager. To use
+  `PrtScn`, first turn off *Use the Print screen key to open screen capture*
+  in Settings → Accessibility → Keyboard.
+- Release builds don't open a console window; when started from a terminal
+  they still print to it (after the prompt returns).
+
 | Key | Action |
 |---|---|
 | drag | select region (Select tool: move/resize with handles) |

@@ -98,7 +98,7 @@ pub fn run(shots: Vec<MonitorShot>, opts: Options) -> Result<Option<Outcome>> {
 
 impl App {
     fn create_views(&mut self, el: &ActiveEventLoop) -> Result<()> {
-        let linux_monitors: Vec<Option<MonitorHandle>> = if cfg!(target_os = "linux") {
+        let monitors: Vec<Option<MonitorHandle>> = if cfg!(any(target_os = "linux", windows)) {
             let handles: Vec<MonitorHandle> = el.available_monitors().collect();
             let infos: Vec<MonitorInfo> = handles
                 .iter()
@@ -124,15 +124,17 @@ impl App {
                 .with_resizable(false)
                 .with_window_level(WindowLevel::AlwaysOnTop)
                 .with_visible(false);
-            // xcap reports logical points on macOS and physical pixels on Windows.
-            // On Linux its coordinates are divided by a global scale factor and
-            // Wayland can't position windows at all, so instead go borderless
-            // fullscreen on the matching output (also covers panels/docks).
+            // xcap reports logical points on macOS. On Linux its coordinates
+            // are divided by a global scale factor and Wayland can't position
+            // windows at all; on Windows, placing a window by physical position
+            // on a monitor with a different DPI triggers a DPI-change resize.
+            // So go borderless fullscreen on the matching output instead (also
+            // covers panels, docks and the taskbar).
             let attrs = if cfg!(target_os = "macos") {
                 attrs
                     .with_position(LogicalPosition::new(shot.x, shot.y))
                     .with_inner_size(LogicalSize::new(shot.width, shot.height))
-            } else if let Some(Some(m)) = linux_monitors.get(i) {
+            } else if let Some(Some(m)) = monitors.get(i) {
                 // Also start at the monitor's geometry: X11 only applies
                 // fullscreen once the window is mapped.
                 attrs
@@ -143,6 +145,12 @@ impl App {
                 attrs
                     .with_position(PhysicalPosition::new(shot.x, shot.y))
                     .with_inner_size(PhysicalSize::new(shot.image.width(), shot.image.height()))
+            };
+            #[cfg(windows)]
+            let attrs = {
+                use winit::platform::windows::WindowAttributesExtWindows;
+                // Overlays shouldn't show up in the taskbar or Alt-Tab.
+                attrs.with_skip_taskbar(true)
             };
             let window = Rc::new(el.create_window(attrs)?);
             #[cfg(target_os = "macos")]
@@ -644,6 +652,21 @@ mod tests {
         let mons = [
             mon("XWAYLAND0", 0, 0, 200, 100),
             mon("XWAYLAND1", 1920, 0, 200, 100),
+        ];
+        assert_eq!(match_monitors(&shots, &mons), vec![Some(1), Some(0)]);
+    }
+
+    #[test]
+    fn matches_windows_device_names() {
+        // Windows: xcap and winit both report physical origins and the
+        // GDI device name; a 150% monitor sits left of a 100% one.
+        let shots = [
+            shot(r"\\.\DISPLAY2", 2560, 0, 1920, 1080, 1.0),
+            shot(r"\\.\DISPLAY1", 0, 0, 2560, 1440, 1.5),
+        ];
+        let mons = [
+            mon(r"\\.\DISPLAY1", 0, 0, 2560, 1440),
+            mon(r"\\.\DISPLAY2", 2560, 0, 1920, 1080),
         ];
         assert_eq!(match_monitors(&shots, &mons), vec![Some(1), Some(0)]);
     }
