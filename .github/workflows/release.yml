@@ -1,0 +1,75 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # Create the release once as a draft so the parallel build jobs only
+  # upload into it (GoReleaser OSS can't split/merge builds).
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          --repo "$GITHUB_REPOSITORY"
+          --draft --generate-notes --verify-tag
+          --title "$GITHUB_REF_NAME"
+
+  build:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: linux-amd64
+            os: ubuntu-22.04
+          - config: linux-arm64
+            os: ubuntu-22.04-arm
+          - config: macos
+            os: macos-latest
+          - config: windows
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.config }}
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config clang libclang-dev libpipewire-0.3-dev libxcb1-dev \
+            libxcb-randr0-dev libxkbcommon-dev libwayland-dev libdbus-1-dev \
+            libegl-dev libgbm-dev
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --config .goreleaser/${{ matrix.config }}.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
