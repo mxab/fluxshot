@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # cosign keyless signing via GitHub OIDC
 
 jobs:
   # Create the release once as a draft so the parallel build jobs only
@@ -21,6 +22,7 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --draft --generate-notes --verify-tag
           --title "$GITHUB_REF_NAME"
+          ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
 
   build:
     needs: draft
@@ -56,6 +58,8 @@ jobs:
             pkg-config clang libclang-dev libpipewire-0.3-dev libxcb1-dev \
             libxcb-randr0-dev libxkbcommon-dev libwayland-dev libdbus-1-dev \
             libegl-dev libgbm-dev
+
+      - uses: sigstore/cosign-installer@v3
 
       - uses: goreleaser/goreleaser-action@v7
         with:
