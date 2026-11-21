@@ -58,6 +58,24 @@ All of them are on the [releases page](https://github.com/mxab/fluxshot/releases
 > **macOS:** the binaries aren't signed yet. After downloading, run
 > `xattr -d com.apple.quarantine fluxshot` once before the first launch.
 
+#### Verifying a download
+
+Every archive comes with a `.sha256` checksum file. Each checksum file is signed
+with [Sigstore cosign](https://docs.sigstore.dev/) by the release workflow
+(keyless), so you can check that it came from this repository's CI:
+
+```sh
+ARCHIVE=fluxshot_<version>_<os>_<arch>.tar.gz   # or the .zip on Windows
+
+cosign verify-blob \
+  --bundle "$ARCHIVE.sha256.sigstore.json" \
+  --certificate-identity-regexp '^https://github\.com/mxab/fluxshot/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "$ARCHIVE.sha256"
+
+shasum -a 256 -c "$ARCHIVE.sha256"
+```
+
 ### Build from source
 
 You'll need a recent stable [Rust toolchain](https://rustup.rs) (edition 2024).
@@ -205,7 +223,7 @@ release, which is published once every build succeeds.
 git tag v0.2.0 && git push origin v0.2.0
 
 # Local dry run (no publishing), e.g. on a Mac:
-goreleaser release --snapshot --clean --config .goreleaser/macos.yaml
+goreleaser release --snapshot --clean --skip=sign --config .goreleaser/macos.yaml
 ```
 
 ## 📄 License

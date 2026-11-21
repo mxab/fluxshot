@@ -23,6 +23,16 @@ archives:
 checksum:
   split: true
 
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+
 changelog:
   disable: true
 
