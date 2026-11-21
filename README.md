@@ -34,8 +34,15 @@ clipboard before you've let go of the mouse. That's the whole workflow.
 
 ## 🚀 Quick start
 
-1. [Install](#-install) it: `brew install --cask mxab/tap/fluxshot`, `scoop install fluxshot`
-   (after adding the bucket), the DMG / setup.exe / .deb / .rpm, or just the binary.
+**1. Install it** (more options and details under [Install](#-install)):
+
+| Platform | Install |
+|---|---|
+| 🍎 macOS | `brew install --cask mxab/tap/fluxshot` |
+| 🪟 Windows | Download and run [`fluxshot_<version>_windows_amd64_setup.exe`](https://github.com/mxab/fluxshot/releases/latest) |
+| 🐧 Debian/Ubuntu | Download the `.deb`, then `sudo apt install ./fluxshot_<version>_linux_amd64.deb` |
+| 🐧 Fedora | Download the `.rpm`, then `sudo dnf install ./fluxshot_<version>_linux_amd64.rpm` |
+
 2. Run `fluxshot`.
 3. Drag a box around something, draw on it if you like, and press **`Enter`**.
 4. Paste it anywhere. 🎉
@@ -45,8 +52,9 @@ clipboard before you've let go of the mouse. That's the whole workflow.
 
 ## 📦 Install
 
-Every [release](https://github.com/mxab/fluxshot/releases/latest) has packages
-for each platform, plus a plain binary in a `.tar.gz`/`.zip` if you'd rather manage it yourself.
+Every [release](https://github.com/mxab/fluxshot/releases/latest) has an
+installer for each platform, plus a [plain binary](#-plain-binary-any-platform)
+if you'd rather manage it yourself.
 
 ### 🍎 macOS
 
@@ -56,62 +64,79 @@ for each platform, plus a plain binary in a `.tar.gz`/`.zip` if you'd rather man
 brew install --cask mxab/tap/fluxshot
 ```
 
-This installs `FluxShot.app` and links the `fluxshot` command to the binary
-inside it. **Or** download `fluxshot_<version>_darwin_universal.dmg` and drag
+**Or download** `fluxshot_<version>_darwin_universal.dmg`, open it and drag
 FluxShot to *Applications*.
 
-Opening **FluxShot.app** starts the [tray](#-tray-mode). The `fluxshot` command
-works as before. Both are the same binary, so they share one Screen Recording permission.
+**What you get:** `FluxShot.app` in *Applications* (opening it starts the
+[tray](#-tray-mode)) and, with Homebrew, the `fluxshot` command on your `PATH`.
+Both are the same binary.
 
-> **Not notarized yet.** The app is only ad-hoc signed. If you installed from
-> the DMG, the first launch is blocked: open *System Settings → Privacy &
-> Security* and click **Open Anyway** (Homebrew clears the quarantine flag for you).
-> macOS also asks for Screen Recording permission again after each update.
+> **First launch:** FluxShot isn't notarized yet. If you installed from the DMG,
+> macOS blocks the first launch: open *System Settings → Privacy & Security* and
+> click **Open Anyway** (Homebrew handles this for you). FluxShot also needs
+> **Screen Recording** permission, which macOS asks for again after each update.
+> See [platform notes](#-macos-1).
 
 ### 🪟 Windows
 
-- **Installer:** `fluxshot_<version>_windows_amd64_setup.exe`. It installs per user,
-  so no admin rights are needed. It adds *FluxShot* (tray) and *FluxShot Capture* to the Start menu, can put
-  `fluxshot` on your `PATH` and can start the tray at sign-in.
-- **winget:** `winget install mxab.FluxShot` (uses the installer above).
-- **Scoop:**
-  ```powershell
-  scoop bucket add mxab https://github.com/mxab/scoop-bucket
-  scoop install fluxshot
-  ```
+**Installer** (recommended): download and run
+`fluxshot_<version>_windows_amd64_setup.exe`. It installs just for you, so no
+admin rights are needed.
 
-The binaries aren't code-signed yet, so SmartScreen may warn you on first run.
-Click *More info → Run anyway*.
+**Or use Scoop:**
+
+```powershell
+scoop bucket add mxab https://github.com/mxab/scoop-bucket
+scoop install fluxshot
+```
+
+**What you get:** *FluxShot* (tray) and *FluxShot Capture* in the Start menu.
+The installer can also put `fluxshot` on your `PATH` and start the tray when you
+sign in. Just tick the boxes.
+
+> **First launch:** FluxShot isn't code-signed yet, so SmartScreen may warn
+> you. Click *More info → Run anyway*.
 
 ### 🐧 Linux
 
-Install the `.deb` or `.rpm` from the release. It adds `fluxshot` and an app
-menu entry (with a *Start Tray* action):
+Download the `.deb` or `.rpm` for your machine (`amd64` or `arm64`) and install it:
 
 ```sh
 sudo apt install ./fluxshot_<version>_linux_amd64.deb     # Debian/Ubuntu
 sudo dnf install ./fluxshot_<version>_linux_amd64.rpm     # Fedora
 ```
 
-ARM64 packages are there too. Or unpack the `.tar.gz` and put `fluxshot` on your `PATH`.
+**What you get:** the `fluxshot` command and an app menu entry with a *Start
+Tray* action.
+
+> **Requirements:** glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40 or
+> later). On GNOME, the tray icon needs the
+> [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/).
+> See [platform notes](#-linux-1) for Wayland and hotkey tips.
+
+### 📁 Plain binary (any platform)
+
+Prefer no installer? Grab the archive for your platform, unpack it and put
+`fluxshot` somewhere on your `PATH`.
 
 | Archive | Platform |
 |---|---|
-| `fluxshot_<version>_darwin_arm64.tar.gz` / `_darwin_amd64.tar.gz` | macOS (binary only) |
+| `fluxshot_<version>_darwin_arm64.tar.gz` / `_darwin_amd64.tar.gz` | macOS (Apple Silicon / Intel) |
 | `fluxshot_<version>_linux_amd64.tar.gz` / `_linux_arm64.tar.gz` | Linux |
 | `fluxshot_<version>_windows_amd64.zip` | Windows |
 
-> **macOS, bare binary:** run `xattr -d com.apple.quarantine fluxshot` once
-> before the first launch.
+> **macOS:** run `xattr -d com.apple.quarantine fluxshot` once before the first
+> launch, and grant Screen Recording to the terminal you start it from.
 
-#### Verifying a download
+### ✅ Verifying a download
 
-Every download (archives, DMG, installers, packages) comes with a `.sha256` checksum file. Each checksum file is signed
-with [Sigstore cosign](https://docs.sigstore.dev/) by the release workflow
+Every download (archives, DMG, installers, packages) comes with a `.sha256`
+checksum file. Each checksum file is signed with
+[Sigstore cosign](https://docs.sigstore.dev/) by the release workflow
 (keyless), so you can check that it came from this repository's CI:
 
 ```sh
-ARCHIVE=fluxshot_<version>_<os>_<arch>.tar.gz   # or the .zip on Windows
+ARCHIVE=fluxshot_<version>_<os>_<arch>.tar.gz   # or any other download
 
 cosign verify-blob \
   --bundle "$ARCHIVE.sha256.sigstore.json" \
@@ -123,7 +148,7 @@ cosign verify-blob \
 echo "$(cat "$ARCHIVE.sha256")  $ARCHIVE" | shasum -a 256 -c
 ```
 
-### Build from source
+### 🛠️ Build from source
 
 You'll need a recent stable [Rust toolchain](https://rustup.rs) (edition 2024).
 
@@ -266,8 +291,8 @@ the app (Homebrew or DMG) to avoid that, or set `notify = false`.
 FluxShot works on X11 and Wayland, including GNOME, KDE and wlroots compositors
 such as sway and Hyprland.
 
-The prebuilt Linux binaries need glibc 2.39 or newer (Ubuntu 24.04, Debian 13,
-Fedora 40 or later). Building from source needs PipeWire 1.0 or newer development headers.
+The prebuilt packages and binaries need glibc 2.39 or newer (see [Install](#-linux)).
+Building from source needs PipeWire 1.0 or newer development headers.
 
 **Build dependencies**
 
