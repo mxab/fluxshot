@@ -344,6 +344,8 @@ Ideas, bug reports and pull requests are all very welcome! If something feels
 slow, clunky or broken, [open an issue](https://github.com/mxab/fluxshot/issues).
 Run it with `FLUXSHOT_TRACE=1` and include the output if you can.
 
+What's planned next is in the [roadmap](ROADMAP.md).
+
 ### Releasing
 
 Releases are built by [GoReleaser](https://goreleaser.com) in
